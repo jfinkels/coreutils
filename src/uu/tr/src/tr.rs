@@ -43,18 +43,16 @@ fn get_usage() -> String {
 }
 
 
-fn delete<'a>(set1: &'a str, complement: bool, s: &'a str) -> String {
-    let set1_ = ExpandSet::new(set1.as_ref());
-    let bset: BitSet = set1_.map(|c| c as usize).collect();
+fn delete<'a>(set1: ExpandSet, complement: bool, s: &'a str) -> String {
+    let bset: BitSet = set1.map(|c| c as usize).collect();
     let delete = |c: &char| (complement == bset.contains(*c as usize));
     s.chars().filter(delete).collect()
 }
 
 
-fn squeeze<'a>(set1: &'a str, complement: bool, s: &'a str) -> String {
+fn squeeze<'a>(set1: ExpandSet, complement: bool, s: &'a str) -> String {
 
-    let set1_ = ExpandSet::new(set1.as_ref());
-    let squeeze_set: BitSet = set1_.map(|c| c as usize).collect();
+    let squeeze_set: BitSet = set1.map(|c| c as usize).collect();
 
     // Define a closure that computes the squeeze operation.
     //
@@ -79,15 +77,12 @@ fn squeeze<'a>(set1: &'a str, complement: bool, s: &'a str) -> String {
 }
 
 
-fn translate<'a>(set1: &'a str, set2: &'a str, truncate: bool, s: &'a str) -> String {
-
-    let set1_ = ExpandSet::new(set1.as_ref());
-    let mut set2_ = ExpandSet::new(set2.as_ref());
+fn translate<'a>(set1: ExpandSet, set2: &mut ExpandSet, truncate: bool, s: &'a str) -> String {
 
     let mut map = FnvHashMap::default();
     let mut s2_prev = '_';
-    for i in set1_ {
-        let s2_next = set2_.next();
+    for i in set1 {
+        let s2_next = set2.next();
 
         if s2_next.is_none() && truncate {
             map.insert(i as usize, i);
@@ -186,18 +181,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let f = |s: &str| {
         if delete_flag {
             if squeeze_flag {
-                squeeze(&sets[1], complement_flag, &delete(&sets[0], complement_flag, s))
+                let set1 = ExpandSet::new(&sets[0]);
+                let set2 = ExpandSet::new(&sets[1]);
+                squeeze(set2, complement_flag, &delete(set1, complement_flag, s))
             } else {
-                delete(&sets[0], complement_flag, s)
+                let set1 = ExpandSet::new(&sets[0]);
+                delete(set1, complement_flag, s)
             }
         } else if squeeze_flag {
             if sets.len() < 2 {
-                squeeze(&sets[0], complement_flag, s)
+                let set1 = ExpandSet::new(&sets[0]);
+                squeeze(set1, complement_flag, s)
             } else {
-                squeeze(&sets[1], complement_flag, &translate(&sets[0], &sets[1], truncate_flag, s))
+                let set1 = ExpandSet::new(&sets[0]);
+                let set2_ = ExpandSet::new(&sets[1]);
+                let mut set2 = ExpandSet::new(&sets[1]);
+                squeeze(set2_, complement_flag, &translate(set1, &mut set2, truncate_flag, s))
             }
         } else {
-            translate(&sets[0], &sets[1], truncate_flag, s)
+            let set1 = ExpandSet::new(&sets[0]);
+            let mut set2 = ExpandSet::new(&sets[1]);
+            translate(set1, &mut set2, truncate_flag, s)
         }
     };
 
