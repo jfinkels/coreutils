@@ -42,121 +42,60 @@ fn get_usage() -> String {
     format!("{} [OPTION]... SET1 [SET2]", executable!())
 }
 
-trait Transform {
-    fn call(&self, s: &str) -> String;
-}
 
-struct Delete {
-    delete_set: BitSet,
-    complement: bool,
-}
-
-impl Delete {
-    fn new(delete_set: ExpandSet, complement: bool) -> Delete {
-        Delete {
-            delete_set: delete_set.map(|c| c as usize).collect(),
-            complement,
-        }
-    }
+fn delete<'a>(set1: ExpandSet, complement: bool, s: &'a str) -> String {
+    let bset: BitSet = set1.map(|c| c as usize).collect();
+    let delete = |c: &char| (complement == bset.contains(*c as usize));
+    s.chars().filter(delete).collect()
 }
 
 
-impl Transform for Delete {
-    fn call(&self, s: &str) -> String {
-        let delete = |c: &char| (self.complement == self.delete_set.contains(*c as usize));
-        s.chars().filter(delete).collect()
-    }
-}
+fn squeeze<'a>(set1: ExpandSet, complement: bool, s: &'a str) -> String {
 
+    let squeeze_set: BitSet = set1.map(|c| c as usize).collect();
 
-struct Squeeze {
-    squeeze_set: BitSet,
-    complement: bool,
-}
-
-impl Squeeze {
-    fn new(squeeze_set: ExpandSet, complement: bool) -> Squeeze {
-        Squeeze {
-            squeeze_set: squeeze_set.map(|c| c as usize).collect(),
-            complement,
-        }
-    }
-}
-
-impl Transform for Squeeze {
-    fn call(&self, s: &str) -> String {
-
-        // Define a closure that computes the squeeze operation.
-        //
-        // We keep track of the previously seen character on
-        // each call to `squeeze()`, but we need to reset the
-        // `prev_c` variable at the beginning of each line of
-        // the input. That's why we define the closure inside
-        // the `while` loop.
-        let mut prev_c = 0 as char;
-        let squeeze = |c| {
-            let result = if prev_c == c && self.complement != self.squeeze_set.contains(c as usize) {
-                None
-            } else {
-                Some(c)
-            };
-            prev_c = c;
-            result
+    // Define a closure that computes the squeeze operation.
+    //
+    // We keep track of the previously seen character on
+    // each call to `squeeze()`, but we need to reset the
+    // `prev_c` variable at the beginning of each line of
+    // the input. That's why we define the closure inside
+    // the `while` loop.
+    let mut prev_c = 0 as char;
+    let squeeze = |c| {
+        let result = if prev_c == c && complement != squeeze_set.contains(c as usize) {
+            None
+        } else {
+            Some(c)
         };
+        prev_c = c;
+        result
+    };
 
-        // First translate, then squeeze each character of the input line.
-        s.chars().filter_map(squeeze).collect()
-    }
+    // First translate, then squeeze each character of the input line.
+    s.chars().filter_map(squeeze).collect()
 }
 
-struct Translate {
-    map: FnvHashMap<usize, char>,
-}
 
-impl Translate {
-    fn new(set1: ExpandSet, set2: &mut ExpandSet, truncate: bool) -> Translate {
+fn translate<'a>(set1: ExpandSet, set2: &mut ExpandSet, truncate: bool, s: &'a str) -> String {
 
-        let mut map = FnvHashMap::default();
-        let mut s2_prev = '_';
-        for i in set1 {
-            let s2_next = set2.next();
+    let mut map = FnvHashMap::default();
+    let mut s2_prev = '_';
+    for i in set1 {
+        let s2_next = set2.next();
 
-            if s2_next.is_none() && truncate {
-                map.insert(i as usize, i);
-            } else {
-                s2_prev = s2_next.unwrap_or(s2_prev);
-                map.insert(i as usize, s2_prev);
-            }
+        if s2_next.is_none() && truncate {
+            map.insert(i as usize, i);
+        } else {
+            s2_prev = s2_next.unwrap_or(s2_prev);
+            map.insert(i as usize, s2_prev);
         }
-
-        Translate {map}
     }
+
+    let f = |c| *map.get(&(c as usize)).unwrap_or(&c);
+
+    s.chars().map(f).collect()
 }
-
-impl Transform for Translate {
-    fn call(&self, s: &str) -> String {
-        s.chars().map(|c| *self.map.get(&(c as usize)).unwrap_or(&c)).collect()
-    }
-}
-
-
-struct Compose {
-    t1: Box<dyn Transform>,
-    t2: Box<dyn Transform>,
-}
-
-impl Compose {
-    fn new(t1: Box<dyn Transform>, t2: Box<dyn Transform>) -> Compose {
-        Compose {t1, t2}
-    }
-}
-
-impl Transform for Compose {
-    fn call(&self, s: &str) -> String {
-        self.t1.call(&self.t2.call(s))
-    }
-}
-
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
@@ -233,34 +172,38 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 1;
     }
 
-    let set1 = ExpandSet::new(&sets[0]);
-    let f = {
-        if delete_flag {
-            if squeeze_flag {
-                let set2 = ExpandSet::new(&sets[1]);
-                Compose::new(Box::new(Squeeze::new(set2, complement_flag)), Box::new(Delete::new(set1, complement_flag)))
-            } else {
-                Delete::new(set1, complement_flag)
-            }
-        } else if squeeze_flag {
-            if sets.len() < 2 {
-                Squeeze::new(set1, complement_flag)
-            } else {
-                let set2_ = ExpandSet::new(&sets[1]);
-                let mut set2 = ExpandSet::new(&sets[1]);
-                Compose::new(Box::new(Squeeze::new(set2_, complement_flag)), Box::new(Translate::new(set1, &mut set2, truncate_flag)))
-            }
-        } else {
-            let mut set2 = ExpandSet::new(&sets[1]);
-            Translate::new(set1, &mut set2, truncate_flag)
-        }
-    };
-
     let stdin = stdin();
     let mut locked_stdin = stdin.lock();
     let stdout = stdout();
     let locked_stdout = stdout.lock();
     let mut buffered_stdout = BufWriter::new(locked_stdout);
+
+    let f = |s: &str| {
+        if delete_flag {
+            if squeeze_flag {
+                let set1 = ExpandSet::new(&sets[0]);
+                let set2 = ExpandSet::new(&sets[1]);
+                squeeze(set2, complement_flag, &delete(set1, complement_flag, s))
+            } else {
+                let set1 = ExpandSet::new(&sets[0]);
+                delete(set1, complement_flag, s)
+            }
+        } else if squeeze_flag {
+            if sets.len() < 2 {
+                let set1 = ExpandSet::new(&sets[0]);
+                squeeze(set1, complement_flag, s)
+            } else {
+                let set1 = ExpandSet::new(&sets[0]);
+                let set2_ = ExpandSet::new(&sets[1]);
+                let mut set2 = ExpandSet::new(&sets[1]);
+                squeeze(set2_, complement_flag, &translate(set1, &mut set2, truncate_flag, s))
+            }
+        } else {
+            let set1 = ExpandSet::new(&sets[0]);
+            let mut set2 = ExpandSet::new(&sets[1]);
+            translate(set1, &mut set2, truncate_flag, s)
+        }
+    };
 
     // Prepare some memory to read each line of the input (`buf`).
     let mut buf = String::with_capacity(BUFFER_LEN + 4);
