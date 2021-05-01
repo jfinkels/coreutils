@@ -123,6 +123,29 @@ fn get_usage() -> String {
     format!("{} [OPTION]... SET1 [SET2]", executable!())
 }
 
+fn translate<'a>(set1: &'a str, set2: &'a str, truncate: bool, s: &'a str) -> String {
+
+    let set1_ = ExpandSet::new(set1.as_ref());
+    let mut set2_ = ExpandSet::new(set2.as_ref());
+
+    let mut map = FnvHashMap::default();
+    let mut s2_prev = '_';
+    for i in set1_ {
+        let s2_next = set2_.next();
+
+        if s2_next.is_none() && truncate {
+            map.insert(i as usize, i);
+        } else {
+            s2_prev = s2_next.unwrap_or(s2_prev);
+            map.insert(i as usize, s2_prev);
+        }
+    }
+
+    let f = |c| *map.get(&(c as usize)).unwrap_or(&c);
+
+    s.chars().map(f).collect()
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let args = args
@@ -362,14 +385,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     } else {
 
-        // Define a closure that computes the translation using a hash map.
-        //
-        // The `unwrap()` should never panic because the
-        // `TranslateOperation.translate()` method always returns
-        // `Some`.
-        let mut set2 = ExpandSet::new(sets[1].as_ref());
-        let translator = TranslateOperation::new(set1, &mut set2, truncate_flag);
-        let translate = |c| translator.translate(c, 0 as char).unwrap();
+        // // Define a closure that computes the translation using a hash map.
+        // //
+        // // The `unwrap()` should never panic because the
+        // // `TranslateOperation.translate()` method always returns
+        // // `Some`.
+        // let mut set2 = ExpandSet::new(sets[1].as_ref());
+        // let translator = TranslateOperation::new(set1, &mut set2, truncate_flag);
+        // let translate = |c| translator.translate(c, 0 as char).unwrap();
 
         // Prepare some memory to read each line of the input (`buf`) and to write
         let mut buf = String::with_capacity(BUFFER_LEN + 4);
@@ -380,8 +403,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 break;
             }
 
-            // First translate, then squeeze each character of the input line.
-            let filtered: String = buf.chars().map(translate).collect();
+            // // First translate, then squeeze each character of the input line.
+            // let filtered: String = buf.chars().map(translate).collect();
+
+            let filtered = translate(&sets[0], &sets[1], truncate_flag, &buf);
             buf.clear();
             buffered_stdout.write_all(filtered.as_bytes()).unwrap();
         }
