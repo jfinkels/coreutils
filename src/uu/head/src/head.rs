@@ -1,7 +1,7 @@
 use clap::{App, Arg};
 use std::convert::TryFrom;
 use std::ffi::OsString;
-use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::{crash, executable, show_error};
 
 const EXIT_FAILURE: i32 = 1;
@@ -32,7 +32,7 @@ mod parse;
 mod split;
 mod take;
 use lines::zlines;
-use take::take_all_but;
+use take::{read_all_but, take_all_but};
 
 fn app<'a>() -> App<'a, 'a> {
     App::new(executable!())
@@ -267,51 +267,12 @@ fn rbuf_n_lines(input: &mut impl std::io::BufRead, n: usize, zero: bool) -> std:
     })
 }
 
-fn rbuf_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<()> {
-    if n == 0 {
-        //prints everything
-        return rbuf_n_bytes(input, std::usize::MAX);
-    }
+fn rbuf_but_last_n_bytes(input: impl std::io::BufRead, n: usize) -> std::io::Result<()> {
+    let mut reader = read_all_but(input, n);
     let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-
-    let mut ringbuf = vec![0u8; n];
-
-    // first we fill the ring buffer
-    if let Err(e) = input.read_exact(&mut ringbuf) {
-        if e.kind() == ErrorKind::UnexpectedEof {
-            return Ok(());
-        } else {
-            return Err(e);
-        }
-    }
-    let mut buffer = [0u8; BUF_SIZE];
-    loop {
-        let read = loop {
-            match input.read(&mut buffer) {
-                Ok(n) => break n,
-                Err(e) => match e.kind() {
-                    ErrorKind::Interrupted => {}
-                    _ => return Err(e),
-                },
-            }
-        };
-        if read == 0 {
-            return Ok(());
-        } else if read >= n {
-            stdout.write_all(&ringbuf)?;
-            stdout.write_all(&buffer[..read - n])?;
-            for i in 0..n {
-                ringbuf[i] = buffer[read - n + i];
-            }
-        } else {
-            stdout.write_all(&ringbuf[..read])?;
-            for i in 0..n - read {
-                ringbuf[i] = ringbuf[read + i];
-            }
-            ringbuf[n - read..].copy_from_slice(&buffer[..read]);
-        }
-    }
+    let mut writer = stdout.lock();
+    io::copy(&mut reader, &mut writer)?;
+    Ok(())
 }
 
 fn rbuf_but_last_n_lines(

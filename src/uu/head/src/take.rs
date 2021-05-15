@@ -1,4 +1,5 @@
-//! Take all but the last elements of an iterator.
+//! Take all but the last elements of an iterator or sequential reader.
+use std::io::Read;
 use uucore::ringbuffer::RingBuffer;
 
 /// Create an iterator over all but the last `n` elements of `iter`.
@@ -58,6 +59,70 @@ where
     }
 }
 
+/// Return an adaptor that reads all but the last `n` bytes from a reader.
+///
+/// This function returns a new instance of [`Read`] that reads all but
+/// the last `n` bytes, after which it will always return [`Ok`](0),
+/// representing the end of the file (EOF).
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use std::io::Cursor;
+///
+/// let mut reader = read_all_but(Cursor::new(b"vwxyz"), 2);
+/// let mut buf = vec![];
+/// reader.read_to_end(&mut buf).unwrap();
+/// assert_eq!(buf, b"vwx");
+/// ```
+pub fn read_all_but<R: Read>(reader: R, n: usize) -> ReadAllBut<R> {
+    ReadAllBut::new(reader, n)
+}
+
+/// A reader adaptor that reads all but the last bytes from a given reader.
+pub struct ReadAllBut<R> {
+    reader: R,
+    ring_buffer: RingBuffer<u8>,
+}
+
+impl<R: Read> ReadAllBut<R> {
+    pub fn new(mut reader: R, n: usize) -> ReadAllBut<R> {
+        // Create a new ring buffer and fill it up.
+        //
+        // If there are fewer than `n` bytes in `reader`, then we
+        // exhaust the reader so that whenever ReadAllBut::next()` is
+        // called, it will return `None`, as expected.
+        let mut buf = vec![0u8; n];
+        let ring_buffer = match reader.read(&mut buf) {
+            Ok(m) => RingBuffer::from_iter(buf[0..m].iter().copied(), n),
+            Err(_) => RingBuffer::new(n),
+        };
+        ReadAllBut {
+            reader,
+            ring_buffer,
+        }
+    }
+}
+
+impl<R: Read> Read for ReadAllBut<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let mut tmp = vec![0u8; buf.len()];
+        match self.reader.read(&mut tmp) {
+            Ok(m) => {
+                let mut i = 0;
+                for b in tmp[0..m].iter() {
+                    if let Some(out_byte) = self.ring_buffer.push_back(*b) {
+                        buf[i] = out_byte;
+                        i += 1;
+                    }
+                }
+                Ok(i)
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -91,6 +156,44 @@ mod tests {
             assert_eq!(Some(&1), iter.next());
             assert_eq!(Some(&2), iter.next());
             assert_eq!(None, iter.next());
+        }
+    }
+
+    mod read_all_but {
+
+        use crate::take::read_all_but;
+        use std::io::{Cursor, Read};
+
+        #[test]
+        fn test_fewer_bytes() {
+            let mut reader = read_all_but(Cursor::new(b"xyz"), 2);
+            let mut buf = vec![];
+            reader.read_to_end(&mut buf).unwrap();
+            assert_eq!(buf, b"x");
+        }
+
+        #[test]
+        fn test_same_number_of_bytes() {
+            let mut reader = read_all_but(Cursor::new(b"xy"), 2);
+            let mut buf = vec![];
+            reader.read_to_end(&mut buf).unwrap();
+            assert_eq!(buf.is_empty(), true);
+        }
+
+        #[test]
+        fn test_more_bytes() {
+            let mut reader = read_all_but(Cursor::new(b"x"), 2);
+            let mut buf = vec![];
+            reader.read_to_end(&mut buf).unwrap();
+            assert_eq!(buf.is_empty(), true);
+        }
+
+        #[test]
+        fn test_zero_bytes() {
+            let mut reader = read_all_but(Cursor::new(b"xyz"), 0);
+            let mut buf = vec![];
+            reader.read_to_end(&mut buf).unwrap();
+            assert_eq!(buf, b"xyz");
         }
     }
 }
