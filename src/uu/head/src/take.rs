@@ -61,33 +61,36 @@ where
 #[cfg(test)]
 mod tests {
 
-    use crate::take::take_all_but;
+    mod take_all_but {
 
-    #[test]
-    fn test_fewer_elements() {
-        let mut iter = take_all_but([0, 1, 2].iter(), 2);
-        assert_eq!(Some(&0), iter.next());
-        assert_eq!(None, iter.next());
-    }
+        use crate::take::take_all_but;
 
-    #[test]
-    fn test_same_number_of_elements() {
-        let mut iter = take_all_but([0, 1].iter(), 2);
-        assert_eq!(None, iter.next());
-    }
+        #[test]
+        fn test_fewer_elements() {
+            let mut iter = take_all_but([0, 1, 2].iter(), 2);
+            assert_eq!(Some(&0), iter.next());
+            assert_eq!(None, iter.next());
+        }
 
-    #[test]
-    fn test_more_elements() {
-        let mut iter = take_all_but([0].iter(), 2);
-        assert_eq!(None, iter.next());
-    }
+        #[test]
+        fn test_same_number_of_elements() {
+            let mut iter = take_all_but([0, 1].iter(), 2);
+            assert_eq!(None, iter.next());
+        }
 
-    #[test]
-    fn test_zero_elements() {
-        let mut iter = take_all_but([0, 1, 2].iter(), 0);
-        assert_eq!(Some(&0), iter.next());
-        assert_eq!(Some(&1), iter.next());
-        assert_eq!(Some(&2), iter.next());
-        assert_eq!(None, iter.next());
+        #[test]
+        fn test_more_elements() {
+            let mut iter = take_all_but([0].iter(), 2);
+            assert_eq!(None, iter.next());
+        }
+
+        #[test]
+        fn test_zero_elements() {
+            let mut iter = take_all_but([0, 1, 2].iter(), 0);
+            assert_eq!(Some(&0), iter.next());
+            assert_eq!(Some(&1), iter.next());
+            assert_eq!(Some(&2), iter.next());
+            assert_eq!(None, iter.next());
+        }
     }
 }
