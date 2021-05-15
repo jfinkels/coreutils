@@ -29,7 +29,6 @@ mod options {
 }
 mod lines;
 mod parse;
-mod ringbuffer;
 mod split;
 mod take;
 use lines::zlines;

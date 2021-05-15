@@ -1,5 +1,5 @@
 //! Take all but the last elements of an iterator.
-use crate::ringbuffer::RingBuffer;
+use uucore::ringbuffer::RingBuffer;
 
 /// Create an iterator over all but the last `n` elements of `iter`.
 ///

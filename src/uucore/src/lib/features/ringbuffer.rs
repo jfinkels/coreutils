@@ -9,6 +9,9 @@ use std::collections::VecDeque;
 /// front of the buffer (in a first-in, first-out manner) before
 /// appending the new element to the back of the buffer.
 ///
+/// Use [`from_iter`] to take the last `size` elements from an
+/// iterator.
+///
 /// # Examples
 ///
 /// After exceeding the size limit, the oldest elements are dropped in
@@ -21,6 +24,15 @@ use std::collections::VecDeque;
 /// buffer.push_back(2);
 /// assert_eq!(vec![1, 2], buffer.data);
 /// ```
+///
+/// Take the last `n` elements from an iterator:
+///
+/// ```rust,ignore
+/// let iter = [0, 1, 2].iter();
+/// let actual = RingBuffer::from_iter(iter, 2).data;
+/// let expected = VecDeque::from_iter([1, 2].iter());
+/// assert_eq!(expected, actual);
+/// ```
 pub struct RingBuffer<T> {
     pub data: VecDeque<T>,
     size: usize,
@@ -32,6 +44,14 @@ impl<T> RingBuffer<T> {
             data: VecDeque::new(),
             size,
         }
+    }
+
+    pub fn from_iter(iter: impl Iterator<Item = T>, size: usize) -> RingBuffer<T> {
+        let mut ringbuf = RingBuffer::new(size);
+        for value in iter {
+            ringbuf.push_back(value);
+        }
+        ringbuf
     }
 
     /// Append a value to the end of the ring buffer.
@@ -85,6 +105,8 @@ impl<T> RingBuffer<T> {
 mod tests {
 
     use crate::ringbuffer::RingBuffer;
+    use std::collections::VecDeque;
+    use std::iter::FromIterator;
 
     #[test]
     fn test_size_limit_zero() {
@@ -100,5 +122,13 @@ mod tests {
         assert_eq!(None, buf.push_back(0));
         assert_eq!(None, buf.push_back(1));
         assert_eq!(Some(0), buf.push_back(2));
+    }
+
+    #[test]
+    fn test_from_iter() {
+        let iter = [0, 1, 2].iter();
+        let actual = RingBuffer::from_iter(iter, 2).data;
+        let expected = VecDeque::from_iter([1, 2].iter());
+        assert_eq!(expected, actual);
     }
 }

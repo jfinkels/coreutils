@@ -16,8 +16,6 @@ extern crate clap;
 extern crate uucore;
 
 mod platform;
-mod ringbuffer;
-use ringbuffer::RingBuffer;
 
 use clap::{App, Arg};
 use std::collections::VecDeque;
@@ -28,6 +26,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
+use uucore::ringbuffer::RingBuffer;
 
 pub mod options {
     pub mod verbosity {
