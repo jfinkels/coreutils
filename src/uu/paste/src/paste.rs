@@ -80,7 +80,6 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn paste(
     filenames: Vec<OsString>,
     serial: bool,
@@ -88,11 +87,8 @@ fn paste(
     line_ending: LineEnding,
 ) -> UResult<()> {
     let unescaped_and_encoded_delimiters = parse_delimiters(delimiters)?;
-
     let stdin_once_cell = OnceCell::<Rc<RefCell<Stdin>>>::new();
-
     let mut input_source_vec = Vec::with_capacity(filenames.len());
-
     for filename in filenames {
         let input_source = if filename == "-" {
             InputSource::StandardInput(
@@ -108,46 +104,33 @@ fn paste(
 
         input_source_vec.push(input_source);
     }
-
     let mut stdout = stdout().lock();
-
     let line_ending_byte = u8::from(line_ending);
     let line_ending_byte_array_ref = &[line_ending_byte];
-
     let input_source_vec_len = input_source_vec.len();
-
     let mut delimiter_state = DelimiterState::new(&unescaped_and_encoded_delimiters);
-
     let mut output = Vec::new();
-
     if serial {
         for input_source in &mut input_source_vec {
             output.clear();
-
             loop {
                 match input_source.read_until(line_ending_byte, &mut output)? {
                     0 => break,
                     _ => {
                         remove_trailing_line_ending_byte(line_ending_byte, &mut output);
-
                         delimiter_state.write_delimiter(&mut output);
                     }
                 }
             }
-
             delimiter_state.remove_trailing_delimiter(&mut output);
-
             stdout.write_all(&output)?;
             stdout.write_all(line_ending_byte_array_ref)?;
         }
     } else {
         let mut eof = vec![false; input_source_vec_len];
-
         loop {
             output.clear();
-
             let mut eof_count = 0;
-
             for (i, input_source) in input_source_vec.iter_mut().enumerate() {
                 if eof[i] {
                     eof_count += 1;
@@ -162,19 +145,14 @@ fn paste(
                         }
                     }
                 }
-
                 delimiter_state.write_delimiter(&mut output);
             }
-
             if eof_count == input_source_vec_len {
                 break;
             }
-
             delimiter_state.remove_trailing_delimiter(&mut output);
-
             stdout.write_all(&output)?;
             stdout.write_all(line_ending_byte_array_ref)?;
-
             // Quote:
             //     When the -s option is not specified:
             //     [...]
@@ -183,7 +161,6 @@ fn paste(
             delimiter_state.reset_to_first_delimiter();
         }
     }
-
     Ok(())
 }
 
